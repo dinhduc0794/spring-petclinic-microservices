@@ -30,10 +30,19 @@ jobs:
     - name: Build with Maven
       run: ./mvnw clean package -DskipTests
 
-    # --- LOGIN THỦ CÔNG (SHELL) ---
     - name: Login to Docker Hub
-      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
+      run: |
+        # Xóa config cũ nếu có để tránh xung đột
+        rm -f ~/.docker/config.json
+        
+        # In ra độ dài của mật khẩu để kiểm tra (Không lộ pass)
+        echo "Username length: ${#DOCKER_USERNAME}"
+        
+        # Dùng tr -d '\n' để cắt bỏ ký tự xuống dòng thừa nếu lỡ có trong Secret
+        echo -n "${{ secrets.DOCKER_PASSWORD }}" | tr -d '\n' | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        
     # --- BUILD & PUSH ---
     - name: Build Config Server
       uses: docker/build-push-action@v5
