@@ -107,4 +107,4 @@ jobs:
         
         echo "Waiting for Rollout..."
         # Chờ tối đa 60s cho Gateway lên
-        kubectl rollout status deployment/api-gateway --timeout=60s
+        kubectl rollout status deployment/api-gateway --timeout=60s  
