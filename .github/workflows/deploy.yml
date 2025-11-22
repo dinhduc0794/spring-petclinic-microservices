@@ -101,6 +101,26 @@ jobs:
         tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-vets-service:${{ github.sha }}
         build-args: EXPOSED_PORT=8083
 
+    # Service 7: Admin Server
+    - name: Build Admin Server
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-admin-server
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-admin-server:${{ github.sha }}
+        build-args: EXPOSED_PORT=9090
+
+    # Service 8: GenAI Service
+    - name: Build GenAI Service
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-genai-service
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-genai-service:${{ github.sha }}
+        build-args: EXPOSED_PORT=8084
+
     # --- DEPLOY TO K3S ---
 
     - name: Deploy to K3s Cluster
