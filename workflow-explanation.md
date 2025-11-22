@@ -1,0 +1,1 @@
+    Em thiết lập Branch Protection Rule để đảm bảo tính toàn vẹn của nhánh Production (main). Quy trình này ngăn chặn việc push code trực tiếp, bắt buộc mọi thay đổi phải thông qua Pull Request và phải vượt qua các bài kiểm tra tự động (CI Status Checks) trước khi được hợp nhất.
