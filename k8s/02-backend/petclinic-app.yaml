@@ -1,6 +1,6 @@
-# -------------------
-# 1. CONFIG SERVER
-# -------------------
+# ==========================================
+# 1. CONFIG SERVER (Lõi cấu hình)
+# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,10 +24,8 @@ spec:
         resources:
           requests:
             memory: "256Mi"
-            cpu: "200m"
           limits:
             memory: "512Mi"
-            cpu: "500m"
 ---
 apiVersion: v1
 kind: Service
@@ -41,9 +39,9 @@ spec:
       targetPort: 8888
 
 ---
-# -------------------
-# 2. DISCOVERY SERVER
-# -------------------
+# ==========================================
+# 2. DISCOVERY SERVER (Eureka)
+# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,14 +83,103 @@ spec:
       targetPort: 8761
 
 ---
-# -------------------
-# 3. VETS SERVICE (Backend Logic)
-# -------------------
+# ==========================================
+# 3. CUSTOMERS SERVICE
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customers-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customers-service
+  template:
+    metadata:
+      labels:
+        app: customers-service
+    spec:
+      containers:
+      - name: customers-service
+        image: dinhduc0794/spring-petclinic-customers-service:latest
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888/"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customers-service
+spec:
+  selector:
+    app: customers-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+
+---
+# ==========================================
+# 4. VISITS SERVICE
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visits-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: visits-service
+  template:
+    metadata:
+      labels:
+        app: visits-service
+    spec:
+      containers:
+      - name: visits-service
+        image: dinhduc0794/spring-petclinic-visits-service:latest
+        ports:
+        - containerPort: 8082
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888/"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: visits-service
+spec:
+  selector:
+    app: visits-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+
+---
+# ==========================================
+# 5. VETS SERVICE
+# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vets-service
-  namespace: default
 spec:
   replicas: 1
   selector:
@@ -107,7 +194,7 @@ spec:
       - name: vets-service
         image: dinhduc0794/spring-petclinic-vets-service:latest
         ports:
-        - containerPort: 8080
+        - containerPort: 8083
         env:
         - name: SPRING_CONFIG_IMPORT
           value: "optional:configserver:http://config-server:8888/"
@@ -127,18 +214,17 @@ spec:
   selector:
     app: vets-service
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 8083
+      targetPort: 8083
 
 ---
-# -------------------
-# 4. API GATEWAY (Frontend Entrypoint)
-# -------------------
+# ==========================================
+# 6. API GATEWAY (FRONTEND ENTRYPOINT)
+# ==========================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  namespace: default
 spec:
   replicas: 1
   selector:
@@ -169,7 +255,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: api-gateway
-  namespace: default
 spec:
   type: NodePort # Mở cổng ra ngoài
   selector:
@@ -177,4 +262,4 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30080 # Truy cập web qua cổng này
+      nodePort: 30080 # Truy cập: http://IP_WORKER:30080
