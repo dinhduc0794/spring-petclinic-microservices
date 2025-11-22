@@ -23,7 +23,7 @@ done
 cp /var/lib/rancher/k3s/server/node-token /vagrant/node-token
 
 # 4. Cấu hình kubectl
-echo "🛠 Configuring kubectl..."
+echo "Configuring kubectl..."
 mkdir -p /home/vagrant/.kube
 cp /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
 chown -R vagrant:vagrant /home/vagrant/.kube
