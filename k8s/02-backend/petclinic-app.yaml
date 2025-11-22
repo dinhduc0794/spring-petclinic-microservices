@@ -263,3 +263,99 @@ spec:
     - port: 8080
       targetPort: 8080
       nodePort: 30080 # Truy cập: http://IP_WORKER:30080
+
+---
+# ==========================================
+# 7. ADMIN SERVER (Monitoring Dashboard)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-server
+  template:
+    metadata:
+      labels:
+        app: admin-server
+    spec:
+      containers:
+      - name: admin-server
+        image: dinhduc0794/spring-petclinic-admin-server:latest
+        ports:
+        - containerPort: 9090
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888/"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-server
+spec:
+  selector:
+    app: admin-server
+  ports:
+    - port: 9090
+      targetPort: 9090
+
+---
+# ==========================================
+# 8. GENAI SERVICE (AI Chatbot)
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: genai-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: genai-service
+  template:
+    metadata:
+      labels:
+        app: genai-service
+    spec:
+      containers:
+      - name: genai-service
+        image: dinhduc0794/spring-petclinic-genai-service:latest
+        ports:
+        - containerPort: 8084
+        env:
+        - name: SPRING_CONFIG_IMPORT
+          value: "optional:configserver:http://config-server:8888/"
+        - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+          value: "http://discovery-server:8761/eureka/"
+        # Lưu ý: GenAI cần API Key thật để chạy tính năng, 
+        # nhưng để Pod Running được (xanh) thì ta để placeholder.
+        - name: OPENAI_API_KEY
+          value: "sk-placeholder-key-for-demo"
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: genai-service
+spec:
+  selector:
+    app: genai-service
+  ports:
+    - port: 8084
+      targetPort: 8084
