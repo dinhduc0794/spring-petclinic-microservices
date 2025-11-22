@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  # Tên image
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/petclinic
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
 jobs:
   build-and-deploy:
@@ -17,9 +16,11 @@ jobs:
         working-directory: ./src
 
     steps:
+    # 1. Checkout Code
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    # 2. Setup Java
     - name: Setup Java 17
       uses: actions/setup-java@v4
       with:
@@ -27,82 +28,95 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
+    # 3. Build Maven Package
     - name: Build with Maven
       run: ./mvnw clean package -DskipTests
 
+    # 4. Login Docker Hub (Fix lỗi đăng nhập)
     - name: Login to Docker Hub
       run: |
-        # Xóa config cũ nếu có để tránh xung đột
         rm -f ~/.docker/config.json
-        
-        # In ra độ dài của mật khẩu để kiểm tra (Không lộ pass)
-        echo "Username length: ${#DOCKER_USERNAME}"
-        
-        # Dùng tr -d '\n' để cắt bỏ ký tự xuống dòng thừa nếu lỡ có trong Secret
         echo -n "${{ secrets.DOCKER_PASSWORD }}" | tr -d '\n' | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-      env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        
-    # --- BUILD & PUSH ---
+
+    # --- BUILD & PUSH IMAGES (6 SERVICES) ---
+    
+    # Service 1: Config Server
     - name: Build Config Server
       uses: docker/build-push-action@v5
       with:
         context: ./src/spring-petclinic-config-server
         file: ./src/docker/Dockerfile
         push: true
-        tags: ${{ env.IMAGE_NAME }}-config-server:${{ github.sha }}
+        # Sửa lại tên đúng chuẩn spring-petclinic
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-config-server:${{ github.sha }}
+        build-args: EXPOSED_PORT=8888
 
+    # Service 2: Discovery Server
     - name: Build Discovery Server
       uses: docker/build-push-action@v5
       with:
         context: ./src/spring-petclinic-discovery-server
         file: ./src/docker/Dockerfile
         push: true
-        tags: ${{ env.IMAGE_NAME }}-discovery-server:${{ github.sha }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-discovery-server:${{ github.sha }}
+        build-args: EXPOSED_PORT=8761
 
+    # Service 3: API Gateway
     - name: Build API Gateway
       uses: docker/build-push-action@v5
       with:
         context: ./src/spring-petclinic-api-gateway
         file: ./src/docker/Dockerfile
         push: true
-        tags: ${{ env.IMAGE_NAME }}-api-gateway:${{ github.sha }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-api-gateway:${{ github.sha }}
+        build-args: EXPOSED_PORT=8080
 
-    - name: Build Vets Service
-      uses: docker/build-push-action@v5
-      with:
-        context: ./src/spring-petclinic-vets-service
-        file: ./src/docker/Dockerfile
-        push: true
-        tags: ${{ env.IMAGE_NAME }}-vets-service:${{ github.sha }}
-
+    # Service 4: Customers Service
     - name: Build Customers Service
       uses: docker/build-push-action@v5
       with:
         context: ./src/spring-petclinic-customers-service
         file: ./src/docker/Dockerfile
         push: true
-        tags: ${{ env.IMAGE_NAME }}-customers-service:${{ github.sha }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-customers-service:${{ github.sha }}
+        build-args: EXPOSED_PORT=8081
 
+    # Service 5: Visits Service
     - name: Build Visits Service
       uses: docker/build-push-action@v5
       with:
         context: ./src/spring-petclinic-visits-service
         file: ./src/docker/Dockerfile
         push: true
-        tags: ${{ env.IMAGE_NAME }}-visits-service:${{ github.sha }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-visits-service:${{ github.sha }}
+        build-args: EXPOSED_PORT=8082
 
-    # --- DEPLOY ---
+    # Service 6: Vets Service
+    - name: Build Vets Service
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-vets-service
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/spring-petclinic-vets-service:${{ github.sha }}
+        build-args: EXPOSED_PORT=8083
+
+    # --- DEPLOY TO K3S ---
+
     - name: Deploy to K3s Cluster
       run: |
         echo "Updating Kubernetes Manifests..."
-        cd .. # Ra khỏi src
+        cd .. 
         
-        # Cập nhật tag trong file YAML (Thay latest bằng commit SHA)
+        # Thay thế tag 'latest' bằng commit SHA hiện tại cho TẤT CẢ file yaml
         sed -i "s/:latest/:${{ github.sha }}/g" k8s/02-backend/*.yaml
         
-        echo "Deploying..."
+        echo "Deploying to Cluster..."
+        # Apply thư mục chứa file yaml (Config, Discovery, Gateway, Services...)
         kubectl apply -f k8s/02-backend/
         
-        echo "Waiting for rollout..."
-        kubectl rollout status deployment/api-gateway --timeout=60s
+        echo "Waiting for rollout (Timeout 300s)..."
+        # Chờ các service quan trọng
+        kubectl rollout status deployment/config-server --timeout=300s
+        kubectl rollout status deployment/discovery-server --timeout=300s
+        kubectl rollout status deployment/api-gateway --timeout=300s
