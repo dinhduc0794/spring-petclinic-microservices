@@ -1,1 +1,1 @@
-{"virtualbox":{"/vagrant":{"guestpath":"/vagrant","hostpath":"/mnt/d/devspace/devops/spring-petclinic-microservices/infra/vagrant","disabled":false,"__vagrantfile":true}}}
+{"virtualbox":{"/vagrant":{"guestpath":"/vagrant","hostpath":"D:/devspace/devops/spring-petclinic-microservices/infra/vagrant","disabled":false,"__vagrantfile":true}}}

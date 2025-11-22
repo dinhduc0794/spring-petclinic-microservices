@@ -2,7 +2,6 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  config.ssh.insert_key = false   # Không tự động đổi SSH Key (Dùng key insecure mặc định để tránh lỗi quyền 0600 trên NTFS)
   # --- OS Configuration ---
   config.vm.box = "ubuntu/jammy64" # Ubuntu 22.04 LTS
   config.vm.box_check_update = false
@@ -28,12 +27,18 @@ Vagrant.configure("2") do |config|
 
   # --- NODE DEFINITIONS (MODEL C) ---
 
-  # 1. Master Node (Control Plane)
+    # 1. Master Node (Control Plane)
   config.vm.define "master" do |master|
     master.vm.hostname = "master-node"
     master.vm.network "private_network", ip: "192.168.56.10"
-    # Master cần ít nhất 2 CPU, 4GB RAM
+    
+    # --- TĂNG TÀI NGUYÊN CHO MASTER ---
+    master.vm.provider "virtualbox" do |vb|
+      vb.memory = "6144"  # Tăng lên 6GB (cũ là 4096 mặc định ở trên)
+      vb.cpus = 4         # Tăng lên 4 CPU (cũ là 2)
+    end
   end
+  
 
   # 2. Worker Node 1 (Operations: CI/CD Runner, Monitoring)
   config.vm.define "worker-ops" do |ops|

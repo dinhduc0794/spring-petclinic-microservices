@@ -2,7 +2,7 @@
 set -e  # Dừng script ngay lập tức nếu có lệnh bị lỗi
 
 echo "--------------------------------------------------"
-echo "🚀 STARTING BOOTSTRAP PROVISIONING..."
+echo "STARTING BOOTSTRAP PROVISIONING..."
 echo "--------------------------------------------------"
 
 # 1. Cấu hình Hostname và IP Resolution
@@ -63,5 +63,5 @@ echo "[TASK 6] Add user to docker group"
 usermod -aG docker vagrant
 
 echo "--------------------------------------------------"
-echo "✅ BOOTSTRAP COMPLETED SUCCESSFULLY!"
+echo "BOOTSTRAP COMPLETED SUCCESSFULLY!"
 echo "--------------------------------------------------"
