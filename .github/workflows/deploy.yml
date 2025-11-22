@@ -1,0 +1,110 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  # Đặt tên image chung để tái sử dụng
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/petclinic
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted # QUAN TRỌNG: Chạy trên máy worker-ops
+    defaults:
+      run:
+        working-directory: ./src # QUAN TRỌNG: Code nằm trong thư mục src
+
+    steps:
+    # 1. Lấy code về máy
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Cài đặt Java 17
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    # 3. Build toàn bộ project ra file .jar (Bỏ qua test để nhanh)
+    - name: Build with Maven
+      run: ./mvnw clean package -DskipTests
+
+    # 4. Đăng nhập Docker Hub
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # --- BUILD & PUSH IMAGES (3 Service chính) ---
+    
+    - name: Build Config Server
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-config-server
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-config-server:${{ github.sha }}
+        # Tag theo mã commit (SHA) để mỗi lần push là ra image mới
+
+    - name: Build Discovery Server
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-discovery-server
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-discovery-server:${{ github.sha }}
+
+    - name: Build API Gateway
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-api-gateway
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-api-gateway:${{ github.sha }}
+
+    - name: Build Vets Service
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-vets-service
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-vets-service:${{ github.sha }}
+
+    - name: Build Customers Service
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-customers-service
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-customers-service:${{ github.sha }}
+
+    - name: Build Visits Service
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/spring-petclinic-visits-service
+        file: ./src/docker/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}-visits-service:${{ github.sha }}
+
+    # --- DEPLOY LÊN KUBERNETES ---
+    
+    - name: Deploy to K3s Cluster
+      run: |
+        echo "Updating Kubernetes Manifests..."
+        cd .. # Quay ra thư mục gốc (vì đang ở ./src)
+        
+        # Cập nhật image tag trong file YAML bằng lệnh sed (Thay 'latest' bằng commit SHA hiện tại)
+        # Lưu ý: Lệnh này sẽ tìm chuỗi ':latest' trong file yaml và thay bằng tag mới
+        sed -i "s/:latest/:${{ github.sha }}/g" k8s/02-backend/*.yaml
+        
+        echo "Deploying to K3s..."
+        kubectl apply -f k8s/02-backend/
+        
+        echo "Waiting for Rollout..."
+        # Chờ tối đa 60s cho Gateway lên
+        kubectl rollout status deployment/api-gateway --timeout=60s
