@@ -1,0 +1,60 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # --- OS Configuration ---
+  config.vm.box = "ubuntu/jammy64" # Ubuntu 22.04 LTS
+  config.vm.box_check_update = false
+
+  # --- Provider Configuration (VirtualBox) ---
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = true
+    vb.cpus = 2
+    vb.memory = "4096" # Mặc định 4GB
+    # Kích hoạt Nested Virtualization (cho phép chạy máy ảo lồng nhau nếu cần)
+    vb.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+    # Tối ưu I/O disk
+    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+    
+    # --- FIX LỖI QUAN TRỌNG CHO WSL ---
+    vb.customize ["modifyvm", :id, "--uart1", "0x3F8", "4"]
+    vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
+  end
+
+  # --- Provisioning (Gọi Script bên ngoài) ---
+  # Script này sẽ chạy trên tất cả các máy khi khởi tạo
+  config.vm.provision "shell", path: "scripts/bootstrap.sh"
+
+  # --- NODE DEFINITIONS (MODEL C) ---
+
+    # 1. Master Node (Control Plane)
+  config.vm.define "master" do |master|
+    master.vm.hostname = "master-node"
+    master.vm.network "private_network", ip: "192.168.56.10"
+    
+    # --- TĂNG TÀI NGUYÊN CHO MASTER ---
+    master.vm.provider "virtualbox" do |vb|
+      vb.memory = "6144"  # Tăng lên 6GB (cũ là 4096 mặc định ở trên)
+      vb.cpus = 4         # Tăng lên 4 CPU (cũ là 2)
+    end
+  end
+  
+
+  # 2. Worker Node 1 (Operations: CI/CD Runner, Monitoring)
+  config.vm.define "worker-ops" do |ops|
+    ops.vm.hostname = "worker-ops"
+    ops.vm.network "private_network", ip: "192.168.56.11"
+    ops.vm.provider "virtualbox" do |vb|
+      vb.memory = "6144" # 6GB RAM cho stack Monitoring + Build Java
+      vb.cpus = 2
+    end
+  end
+
+  # 3. Worker Node 2 (Application Workload)
+  config.vm.define "worker-app" do |app|
+    app.vm.hostname = "worker-app"
+    app.vm.network "private_network", ip: "192.168.56.12"
+    # App này cần tài nguyên vừa phải để chạy các microservices
+  end
+
+end
