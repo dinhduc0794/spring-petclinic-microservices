@@ -23,6 +23,62 @@ Dự án sử dụng mô hình 3-Node Cluster (Model C) để đảm bảo tính
 
 *(Hình 1: Sơ đồ kiến trúc hệ thống 3 Node)*
 
+# PHẦN 1: TƯ DUY DEVOPS & THIẾT KẾ WORKFLOW
+
+## 1. Phân tích Dự án (Spring PetClinic Microservices)
+Dự án được xây dựng dựa trên kiến trúc Microservices với các thành phần cốt lõi:
+- **Config Server:** Quản lý cấu hình tập trung.
+- **Discovery Server (Eureka):** Đăng ký và khám phá dịch vụ.
+- **API Gateway:** Cổng vào duy nhất, điều hướng request.
+- **Business Services:** Customers, Vets, Visits (Spring Boot).
+- **Hạ tầng:** Yêu cầu Database, Monitoring và Logging tập trung.
+
+## 2. Thiết kế Workflow DevOps (CI/CD Pipeline)
+
+Hệ thống được thiết kế với hai môi trường riêng biệt: **Development (Dev)** và **Production (Prod)**, tuân thủ nguyên tắc "Build Once, Deploy Anywhere".
+
+### Quy trình tổng thể (The Pipeline Stages)
+
+| Giai đoạn | Công cụ sử dụng | Mô tả chi tiết |
+| :--- | :--- | :--- |
+| **1. Source** | **GitHub** | Quản lý mã nguồn. Sử dụng chiến lược nhánh (Branching Strategy) với `main` là nhánh ổn định và các `feature-branch` để phát triển. |
+| **2. Build & Test** | **Maven** | Biên dịch mã nguồn Java, chạy Unit Test. Sử dụng Maven Wrapper (`mvnw`) để đảm bảo tính nhất quán về version. |
+| **3. Dockerize** | **Docker** | Đóng gói ứng dụng thành Container Image. Image được tối ưu hóa kích thước sử dụng `openjdk:17-alpine`. |
+| **4. Push** | **Docker Hub** | Lưu trữ Docker Image (Container Registry). |
+| **5. Deploy** | **Kubernetes (K3s), Github Action** | Triển khai ứng dụng lên Cluster. Sử dụng Self-hosted Runner để deploy trực tiếp vào mạng nội bộ. |
+| **6. Monitor** | **Prometheus/Grafana** | Giám sát tài nguyên (CPU, RAM) và sức khỏe ứng dụng. |
+
+### Cơ chế hoạt động chi tiết
+
+#### A. Môi trường Development (Automation)
+* **Trigger:** Tự động kích hoạt khi có code mới được Merge vào nhánh `main`.
+* **Version Strategy:** Image Tag được đánh dấu bằng **Commit SHA** (ví dụ: `dev-a1b2c3d`). Điều này giúp truy vết chính xác phiên bản code đang chạy.
+* **Deployment:** Tự động cập nhật lên Namespace `dev` (hoặc cụm Cluster hiện tại) để Developer kiểm tra ngay lập tức.
+
+#### B. Môi trường Production (Manual Approval)
+* **Trigger:** Kích hoạt khi tạo một **Release Tag** (ví dụ: `v1.0.0`) trên GitHub.
+* **Version Strategy:** Image Tag theo Semantic Versioning (`v1.0.0`). Đây là bản Build ổn định (Stable Artifact).
+* **Deployment:** Triển khai lên Namespace `prod`. Có thể tích hợp bước phê duyệt thủ công (Manual Approval) trên GitHub Environments để đảm bảo an toàn.
+
+### Các chiến lược quản lý
+
+#### 1. Secret Management (Quản lý bí mật)
+* **CI/CD:** Sử dụng **GitHub Secrets** để lưu trữ `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `KUBE_CONFIG`. Không bao giờ hardcode mật khẩu trong file YAML.
+* **Runtime:** Sử dụng **Kubernetes Secrets** để mount các biến nhạy cảm (DB Password, API Keys) vào trong Pod dưới dạng Environment Variable.
+
+#### 2. Chiến lược Rollback (Khôi phục)
+* Sử dụng tính năng **Rolling Update** của Kubernetes Deployment để đảm bảo Zero Downtime.
+* Khi bản deploy mới bị lỗi, thực hiện lệnh: `kubectl rollout undo deployment/<tên-service>`.
+* Do Image được tag theo version cụ thể, việc quay lại phiên bản cũ là tức thời và an toàn.
+
+#### 3. Versioning (Định danh phiên bản)
+* **Dev:** `sha-${github.sha}` (Duy nhất cho mỗi commit).
+* **Prod:** `v${major}.${minor}.${patch}` (Dễ đọc, dùng cho release).
+
+---
+
+# PHẦN 2: THỰC HÀNH TRIỂN KHAI (Hands-on Lab)
+
 ## GIAI ĐOẠN 1: CHUẨN BỊ REPOSITORY & CẤU TRÚC DỰ ÁN
 
 ### 2.1. Tái cấu trúc thư mục (Refactoring)
