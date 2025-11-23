@@ -1,0 +1,64 @@
+graph TD
+    %% --- Actors ---
+    Dev[Developer]
+    Lead[Release Manager]
+
+    %% --- Source Control ---
+    subgraph SCM [Source Code Management]
+        Repo[GitHub Repository]
+        MainBr[Main Branch]
+        Tag[Release Tag v1.0]
+    end
+
+    %% --- CI Pipeline ---
+    subgraph CI [Continuous Integration]
+        Runner[Self-hosted Runner]
+        Build[Maven Build & Test]
+        DockerBuild[Docker Build]
+        DockerPush[Docker Push]
+    end
+
+    %% --- Artifacts ---
+    Registry[Docker Hub Registry]
+
+    %% --- Infrastructure ---
+    subgraph Infra [Kubernetes Cluster (Model C)]
+        Master[Master Node]
+        
+        subgraph OpsNode [Worker Ops]
+            RunnerAgent[Runner Agent]
+            Monitoring[Prometheus/Grafana]
+            Logging[ELK Stack]
+        end
+
+        subgraph AppNode [Worker App]
+            PodDev[PetClinic Pods]
+        end
+    end
+
+    %% --- Flows ---
+    Dev -->|Push Code| Repo
+    Repo -->|Merge| MainBr
+    Lead -->|Create Tag| Tag
+    
+    MainBr -->|Trigger Pipeline| RunnerAgent
+    Tag -->|Trigger Pipeline| RunnerAgent
+
+    RunnerAgent --> Build
+    Build --> DockerBuild
+    DockerBuild --> DockerPush
+    DockerPush -->|Store Image| Registry
+
+    Registry -->|Pull Image| AppNode
+    RunnerAgent -->|kubectl apply| Master
+    Master -->|Schedule| AppNode
+
+    %% --- Monitoring Flow ---
+    Monitoring -.->|Scrape Metrics| AppNode
+    Logging -.->|Collect Logs| AppNode
+
+    %% --- Styles ---
+    style RunnerAgent fill:#f9f,stroke:#333,stroke-width:2px
+    style Registry fill:#dbf,stroke:#333,stroke-width:2px
+    style PodDev fill:#bfb,stroke:#333,stroke-width:2px
+    style Master fill:#ff9,stroke:#333,stroke-width:2px
