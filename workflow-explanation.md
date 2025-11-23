@@ -25,55 +25,83 @@ Dự án sử dụng mô hình 3-Node Cluster (Model C) để đảm bảo tính
 
 # PHẦN 1: TƯ DUY DEVOPS & THIẾT KẾ WORKFLOW
 
-## 1. Phân tích Dự án (Spring PetClinic Microservices)
-Dự án được xây dựng dựa trên kiến trúc Microservices với các thành phần cốt lõi:
-- **Config Server:** Quản lý cấu hình tập trung.
-- **Discovery Server (Eureka):** Đăng ký và khám phá dịch vụ.
-- **API Gateway:** Cổng vào duy nhất, điều hướng request.
-- **Business Services:** Customers, Vets, Visits (Spring Boot).
-- **Hạ tầng:** Yêu cầu Database, Monitoring và Logging tập trung.
+## 1. Triết lý Tiếp cận (DevOps Philosophy)
+Dự án Spring PetClinic Microservices được xây dựng dựa trên các nguyên lý cốt lõi của DevOps hiện đại nhằm đảm bảo tốc độ phát triển nhanh nhưng vẫn giữ được sự ổn định của hệ thống:
 
-## 2. Thiết kế Workflow DevOps (CI/CD Pipeline)
+* **Infrastructure as Code (IaC):** Toàn bộ hạ tầng (Máy ảo, Mạng, Kubernetes Cluster) được định nghĩa bằng code (`Vagrantfile`, Shell Scripts) thay vì cấu hình thủ công. Điều này đảm bảo tính nhất quán và khả năng tái tạo (Reproducibility) môi trường bất cứ lúc nào.
+* **Automation First:** Loại bỏ tối đa các thao tác thủ công. Từ việc dựng máy chủ (Provisioning) đến triển khai ứng dụng (Deployment) đều được tự động hóa qua Pipeline.
+* **Separation of Concerns (SoC):** Phân tách rõ ràng giữa môi trường Quản trị (Master Node), Vận hành (Ops Node), và Ứng dụng (App Node) để tối ưu hóa tài nguyên và tăng cường bảo mật.
 
-Hệ thống được thiết kế với hai môi trường riêng biệt: **Development (Dev)** và **Production (Prod)**, tuân thủ nguyên tắc "Build Once, Deploy Anywhere".
+## 2. Hệ sinh thái Công cụ (Toolchain Landscape)
 
-### Quy trình tổng thể (The Pipeline Stages)
+Dưới đây là danh sách chi tiết các công cụ được lựa chọn và vai trò của chúng trong hệ thống:
 
-| Giai đoạn | Công cụ sử dụng | Mô tả chi tiết |
+| Lớp (Layer) | Công cụ | Vai trò & Lý do lựa chọn |
 | :--- | :--- | :--- |
-| **1. Source** | **GitHub** | Quản lý mã nguồn. Sử dụng chiến lược nhánh (Branching Strategy) với `main` là nhánh ổn định và các `feature-branch` để phát triển. |
-| **2. Build & Test** | **Maven** | Biên dịch mã nguồn Java, chạy Unit Test. Sử dụng Maven Wrapper (`mvnw`) để đảm bảo tính nhất quán về version. |
-| **3. Dockerize** | **Docker** | Đóng gói ứng dụng thành Container Image. Image được tối ưu hóa kích thước sử dụng `openjdk:17-alpine`. |
-| **4. Push** | **Docker Hub** | Lưu trữ Docker Image (Container Registry). |
-| **5. Deploy** | **Kubernetes (K3s), Github Action** | Triển khai ứng dụng lên Cluster. Sử dụng Self-hosted Runner để deploy trực tiếp vào mạng nội bộ. |
-| **6. Monitor** | **Prometheus/Grafana** | Giám sát tài nguyên (CPU, RAM) và sức khỏe ứng dụng. |
+| **Source Control** | **GitHub** | Lưu trữ mã nguồn, quản lý phiên bản, và là trung tâm điều phối CI/CD. Sử dụng tính năng *Branch Protection Rules* để đảm bảo quy trình Review Code nghiêm ngặt trước khi merge vào nhánh chính. |
+| **Virtualization** | **VirtualBox** | Hypervisor loại 2, cung cấp nền tảng ảo hóa để chạy các node Linux (Ubuntu 22.04) trên máy tính cá nhân (Windows Host). |
+| **IaC / Provisioning** | **Vagrant** | Công cụ định nghĩa và quản lý vòng đời máy ảo. Giúp dựng môi trường Lab 3-node chuẩn chỉnh chỉ với một lệnh `vagrant up`, tự động hóa việc cài đặt Docker và cấu hình mạng. |
+| **Config Mgmt** | **Shell Scripts** | (Thay thế cho Ansible trong phạm vi Lab này) Tự động cài đặt Docker, K3s, và các dependencies ngay khi máy ảo khởi động (Bootstrapping), đảm bảo môi trường luôn sẵn sàng. |
+| **Orchestrator** | **K3s (Kubernetes)** | Phiên bản Kubernetes nhẹ (Lightweight), được CNCF chứng nhận. K3s lý tưởng cho môi trường Lab/Edge vì tốn ít RAM/CPU hơn K8s gốc (Kubeadm) nhưng vẫn cung cấp đầy đủ tính năng API chuẩn. |
+| **Container Engine** | **Docker** | Môi trường thực thi (Runtime) cho việc đóng gói ứng dụng và chạy các container bên trong K3s (thông qua Containerd CRI). |
+| **CI/CD** | **GitHub Actions** | Nền tảng tự động hóa quy trình Build - Test - Deploy. |
+| **Runner** | **Self-hosted Runner** | Agent chạy trực tiếp trên node `worker-ops` trong mạng nội bộ. Giúp tiết kiệm chi phí Cloud và cho phép deploy trực tiếp vào Cluster K3s mà không cần mở cổng API ra Internet (Bảo mật cao). |
+| **Artifact Hub** | **Docker Hub** | Kho lưu trữ Docker Image tập trung, giúp phân phối Image từ bước Build sang bước Deploy. |
 
-### Cơ chế hoạt động chi tiết
+## 3. Thiết kế Kiến trúc Hạ tầng (Infrastructure Design)
 
-#### A. Môi trường Development (Automation)
-* **Trigger:** Tự động kích hoạt khi có code mới được Merge vào nhánh `main`.
-* **Version Strategy:** Image Tag được đánh dấu bằng **Commit SHA** (ví dụ: `dev-a1b2c3d`). Điều này giúp truy vết chính xác phiên bản code đang chạy.
-* **Deployment:** Tự động cập nhật lên Namespace `dev` (hoặc cụm Cluster hiện tại) để Developer kiểm tra ngay lập tức.
+Hệ thống được thiết kế theo mô hình **Cluster 3-Node (Model C)** để mô phỏng môi trường Production thực tế:
 
-#### B. Môi trường Production (Manual Approval)
-* **Trigger:** Kích hoạt khi tạo một **Release Tag** (ví dụ: `v1.0.0`) trên GitHub.
-* **Version Strategy:** Image Tag theo Semantic Versioning (`v1.0.0`). Đây là bản Build ổn định (Stable Artifact).
-* **Deployment:** Triển khai lên Namespace `prod`. Có thể tích hợp bước phê duyệt thủ công (Manual Approval) trên GitHub Environments để đảm bảo an toàn.
+### 3.1. Master Node (Control Plane)
+* **IP:** `192.168.56.10`
+* **Nhiệm vụ:** Chuyên trách quản lý Cluster (API Server, Scheduler, Etcd). Không chạy ứng dụng nghiệp vụ để đảm bảo độ ổn định cao nhất cho hệ thống điều khiển.
 
-### Các chiến lược quản lý
+### 3.2. Worker Ops (Operations Node) - *Điểm đặc biệt*
+* **IP:** `192.168.56.11`
+* **Nhiệm vụ:** Đây là node "hậu cần".
+    * Chạy **GitHub Actions Runner**: Thực hiện các tác vụ nặng như Build Java (Maven), Build Docker Image. Việc tách node này giúp quá trình Build không làm treo ứng dụng chính.
+    * Chạy **Monitoring Stack**: Prometheus/Grafana sẽ nằm ở đây để giám sát 2 node còn lại.
 
-#### 1. Secret Management (Quản lý bí mật)
-* **CI/CD:** Sử dụng **GitHub Secrets** để lưu trữ `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `KUBE_CONFIG`. Không bao giờ hardcode mật khẩu trong file YAML.
-* **Runtime:** Sử dụng **Kubernetes Secrets** để mount các biến nhạy cảm (DB Password, API Keys) vào trong Pod dưới dạng Environment Variable.
+### 3.3. Worker App (Workload Node)
+* **IP:** `192.168.56.12`
+* **Nhiệm vụ:** Môi trường thuần túy để chạy các Microservices của Spring PetClinic (Gateway, Customers, Vets...). Đảm bảo tài nguyên (RAM/CPU) được dành trọn vẹn cho ứng dụng phục vụ người dùng.
 
-#### 2. Chiến lược Rollback (Khôi phục)
-* Sử dụng tính năng **Rolling Update** của Kubernetes Deployment để đảm bảo Zero Downtime.
-* Khi bản deploy mới bị lỗi, thực hiện lệnh: `kubectl rollout undo deployment/<tên-service>`.
-* Do Image được tag theo version cụ thể, việc quay lại phiên bản cũ là tức thời và an toàn.
+## 4. Quy trình CI/CD (Continuous Integration & Deployment)
 
-#### 3. Versioning (Định danh phiên bản)
-* **Dev:** `sha-${github.sha}` (Duy nhất cho mỗi commit).
-* **Prod:** `v${major}.${minor}.${patch}` (Dễ đọc, dùng cho release).
+Workflow được thiết kế tự động hóa hoàn toàn (End-to-End Pipeline):
+
+### Giai đoạn 1: Continuous Integration (CI)
+1.  **Trigger:** Developer tạo Pull Request vào nhánh `main` (hoặc push vào main).
+2.  **Checkout:** GitHub Runner (trên `worker-ops`) tải mã nguồn mới nhất về.
+3.  **Build & Test:**
+    * Sử dụng Maven Wrapper (`./mvnw`) để biên dịch mã nguồn Java thành các file `.jar`.
+    * (Optional) Chạy Unit Test để đảm bảo chất lượng code.
+4.  **Dockerize & Push:**
+    * Sử dụng Dockerfile tối ưu (Generic Dockerfile) để đóng gói file `.jar` vào Docker Image.
+    * Image được gắn thẻ (Tag) bằng mã Commit SHA (ví dụ: `config-server:a1b2c3d`) để định danh duy nhất.
+    * Đẩy (Push) Image lên Docker Hub Registry.
+
+### Giai đoạn 2: Continuous Deployment (CD)
+1.  **Update Manifest:**
+    * Pipeline tự động chỉnh sửa các file Kubernetes Deployment (`.yaml`), thay thế tag `latest` bằng tag Commit SHA vừa build (sử dụng `sed`).
+2.  **Apply to Cluster:**
+    * Runner sử dụng `kubectl` (đã được ủy quyền config) để gửi lệnh cập nhật tới Master Node.
+3.  **Rolling Update:**
+    * Kubernetes thực hiện chiến lược Rolling Update: Tạo Pod mới -> Chờ Pod mới `Ready` -> Tắt Pod cũ. Đảm bảo **Zero Downtime** (Không gián đoạn dịch vụ).
+
+## 5. Các Chiến lược Quản trị (Governance)
+
+* **Quản lý Bí mật (Secrets Management):**
+    * Không bao giờ lưu mật khẩu/token trong code (Hardcode).
+    * Sử dụng **GitHub Secrets** để mã hóa `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `KUBE_CONFIG`.
+    * Sử dụng **Kubernetes Secrets** (nếu có) cho các cấu hình nhạy cảm trong Cluster.
+
+* **Quản lý Phiên bản (Versioning Strategy):**
+    * Sử dụng **Commit SHA** cho môi trường Dev/Staging để truy vết lỗi nhanh chóng đến từng dòng code thay đổi.
+    * Sử dụng **Semantic Versioning (v1.0.0)** cho môi trường Production khi đánh Tag phát hành.
+
+* **Khả năng Tự phục hồi (Self-healing):**
+    * Sử dụng Kubernetes `Deployment` với `replicas` xác định. Nếu Pod bị crash hoặc Node bị lỗi, Kubernetes Controller Manager sẽ tự động tạo lại Pod mới để đảm bảo trạng thái mong muốn (Desired State).
 
 ---
 
@@ -421,35 +449,223 @@ worker-app    Ready    <none>                 56s   v1.33.5+k3s1
 
 ## GIAI ĐOẠN 4: THIẾT LẬP CI/CD VỚI GITHUB ACTIONS
 
-### 5.1. Setup Self-hosted Runner
+Hệ thống CI/CD được thiết kế để tự động hóa hoàn toàn quy trình từ khi Developer đẩy mã nguồn lên GitHub cho đến khi ứng dụng chạy thực tế trên Kubernetes Cluster.
 
-Để tiết kiệm chi phí Cloud và tận dụng tài nguyên local, tôi cài đặt Runner trên node worker-ops.
+### 4.1. Thiết lập Self-hosted Runner
 
-**Thao tác:**
+Thay vì sử dụng Cloud Runner mặc định của GitHub, tôi thiết lập **Self-hosted Runner** chạy trực tiếp trên node `worker-ops`.
 
-- Vào GitHub Repo -> Settings -> Actions -> Runners -> New self-hosted runner.
-- SSH vào worker-ops: `vagrant ssh worker-ops`.
-- Chạy các lệnh cài đặt Runner (Download, Config, Install Service).
+**Lý do lựa chọn:**
+1.  **Bảo mật & Kết nối:** Runner nằm trong mạng nội bộ (Private Network), có thể kết nối trực tiếp tới Master Node thông qua `kubectl` mà không cần mở cổng API Server ra Internet công cộng.
+2.  **Hiệu năng:** Tận dụng tài nguyên phần cứng (6GB RAM) của máy ảo `worker-ops` để tăng tốc độ build Java (Maven) và Docker, tránh hiện tượng nghẽn cổ chai trên Cloud Runner miễn phí.
+3.  **Chi phí:** Tiết kiệm chi phí minutes của GitHub Actions.
 
-Cài đặt thêm Java JDK và Maven để Runner có thể build code:
+**Quy trình cài đặt (Thực hiện trên `worker-ops`):**
 
+1.  **Đăng ký Runner:**
+    * Tại GitHub Repo: **Settings > Actions > Runners > New self-hosted runner**.
+    * Chọn OS: **Linux**, Architecture: **x64**.
+
+2.  **Cài đặt Agent:**
+    ```bash
+    # Tạo thư mục và tải runner
+    mkdir actions-runner && cd actions-runner
+    curl -o actions-runner-linux-x64.tar.gz -L [https://github.com/actions/runner/releases/download/v2.320.0/actions-runner-linux-x64-2.320.0.tar.gz](https://github.com/actions/runner/releases/download/v2.320.0/actions-runner-linux-x64-2.320.0.tar.gz)
+    tar xzf ./actions-runner-linux-x64.tar.gz
+
+    # Cấu hình kết nối (Sử dụng Token từ GitHub)
+    ./config.sh --url [https://github.com/dinhduc0794/spring-petclinic-microservices](https://github.com/dinhduc0794/spring-petclinic-microservices) --token <YOUR_GITHUB_TOKEN>
+    # Name: worker-ops-runner
+    ```
+
+3.  **Cấu hình chạy ngầm (Service):**
+    Để đảm bảo Runner luôn hoạt động (ngay cả khi reboot), tôi cài đặt nó dưới dạng Systemd Service:
+    ```bash
+    sudo ./svc.sh install
+    sudo ./svc.sh start
+    ```
+
+4.  **Chuẩn bị môi trường Build:**
+    Cài đặt các công cụ cần thiết cho quy trình build trên máy `worker-ops`:
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y openjdk-17-jdk maven docker.io
+    ```
+
+5.  **Ủy quyền Kubernetes:**
+    
+    Xuất key từ máy Master
+    ```bash
+    # Copy file config ra thư mục chia sẻ
+    sudo cp /etc/rancher/k3s/k3s.yaml /vagrant/kubeconfig_admin
+    sudo chmod 644 /vagrant/kubeconfig_admin
+    ```
+
+    Copy file cấu hình `kubeconfig` từ Master sang Worker Ops để Runner có quyền thực thi lệnh `kubectl`.
+    ```bash
+    # 1. Tạo thư mục config
+    mkdir -p ~/.kube
+
+    # 2. Copy file từ thư mục chia sẻ vào
+    cp /vagrant/kubeconfig_admin ~/.kube/config
+
+    # 3. Sửa IP (Vì file gốc trỏ về 127.0.0.1 của Master, sửa thành IP Master 192.168.56.10)
+    sed -i 's/127.0.0.1/192.168.56.10/g' ~/.kube/config
+
+    # 4. Phân quyền cho user hiện tại (vagrant)
+    chmod 600 ~/.kube/config
+
+    # 5. Test thử
+    kubectl get nodes
+    ```
+
+**Kết quả:** Runner hiển thị trạng thái **Idle (Xanh)** trên GitHub Settings.
+
+### 4.2. Quy trình Thao tác Git & Kích hoạt Pipeline
+
+Để đảm bảo tính ổn định cho nhánh `main` (Production), quy trình phát triển tuân thủ nghiêm ngặt các bước:
+
+1.  **Phát triển:** Developer tạo nhánh mới (ví dụ `devops-final`) để thực hiện thay đổi code.
+2.  **Commit & Push:** Đẩy code lên nhánh phụ.
+3.  **Pull Request (PR):** Tạo PR yêu cầu hợp nhất vào `main`.
+4.  **Merge:** Sau khi review, thực hiện Merge PR. Sự kiện `push to main` này sẽ kích hoạt Pipeline.
+
+### 4.3. Chi tiết Pipeline (`deploy.yml`)
+
+File cấu hình `.github/workflows/deploy.yml` định nghĩa quy trình tự động hóa gồm các bước:
+
+1.  **Checkout Code:** Lấy mã nguồn mới nhất.
+2.  **Build Maven:** Biên dịch mã nguồn Java thành file `.jar` (Sử dụng Maven Wrapper để đảm bảo tính tương thích).
+3.  **Docker Build & Push:**
+    * Đăng nhập Docker Hub (Sử dụng Token bảo mật qua GitHub Secrets).
+    * Đóng gói file `.jar` vào Docker Image (Sử dụng Generic Dockerfile).
+    * Gán thẻ (Tag) bằng **Commit SHA** (`${{ github.sha }}`) để định danh phiên bản duy nhất.
+    * Đẩy (Push) lên Docker Hub.
+4.  **Deploy to K3s:**
+    * Tự động cập nhật file manifest Kubernetes: Thay thế tag `:latest` bằng tag Commit SHA vừa build.
+    * Áp dụng cấu hình mới vào Cluster (`kubectl apply`).
+    * Chờ đợi (`rollout status`) để đảm bảo ứng dụng khởi động thành công trước khi báo cáo kết quả.
+
+---
+
+## GIAI ĐOẠN 5: GIÁM SÁT HỆ THỐNG (OBSERVABILITY)
+
+Hệ thống giám sát được triển khai trên node `worker-ops` sử dụng bộ công cụ tiêu chuẩn công nghiệp: **Prometheus** (thu thập metrics) và **Grafana** (hiển thị dashboard).
+
+### 5.1. Triển khai bằng Helm Chart
+
+Sử dụng **Helm** (Kubernetes Package Manager) để cài đặt gói `kube-prometheus-stack`. Đây là giải pháp "All-in-one" giúp cài đặt và cấu hình tự động Prometheus, Grafana, Node Exporter.
+
+**Các bước thực hiện trên `worker-ops`:**
+
+1.  **Cài đặt Helm:**
+    ```bash
+    curl [https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3](https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3) | bash
+    ```
+
+2.  **Thêm Repo & Cài đặt Stack:**
+    ```bash
+    helm repo add prometheus-community [https://prometheus-community.github.io/helm-charts](https://prometheus-community.github.io/helm-charts)
+    helm repo update
+    
+    # Tạo namespace riêng biệt
+    kubectl create namespace observability
+
+    # Cài đặt Stack và mở cổng NodePort 30300 cho Grafana
+    helm install monitoring prometheus-community/kube-prometheus-stack \
+      --namespace observability \
+      --set grafana.service.type=NodePort \
+      --set grafana.service.nodePort=30300 \
+      --set alertmanager.enabled=false
+    ```
+
+### 5.2. Truy cập Dashboard Giám sát
+
+Sau khi triển khai, Grafana có thể truy cập trực tiếp từ trình duyệt máy chủ (Windows) thông qua mạng nội bộ Vagrant.
+
+* **URL:** `http://192.168.56.11:30300`
+* **Lý giải kỹ thuật:** Máy tính Windows có thể truy cập trực tiếp IP `192.168.56.11` nhờ card mạng ảo Host-only Adapter. Traffic đi đến cổng `30300` sẽ được `kube-proxy` trên node điều hướng đến Pod Grafana đang chạy trong Cluster.
+
+**Thông tin đăng nhập:**
+Mật khẩu Admin được lấy từ Kubernetes Secret (Do Helm tạo ngẫu nhiên để bảo mật):
 ```bash
-sudo apt-get update
-sudo apt-get install -y openjdk-17-jdk maven
+kubectl get secret --namespace observability monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+```
+Kết quả:
+![Đăng nhập thành công vào Grafana](assets/monitoring_grafana.png)
+
+![Core DNS](assets/grafana-0.png)
+
+![Dashboard: "Kubernetes / Compute Resources / Cluster" -> health check k8s](assets/grafana-1.png)
+
+![Dashboard: "Kubernetes / Compute Resources / Node (Pods)"](assets/grafana-2.png)
+
+![Dashboard: "Kubernetes / Compute Resources / Pod" api-gateway](assets/grafana-3.png)
+
+
+## 5.3. Quản lý Log Tập trung (Logging - EFK Stack)
+
+Để giải quyết vấn đề log bị phân tán trên nhiều Pods và mất đi khi Pod restart, tôi triển khai giải pháp **EFK Stack** (Elasticsearch, Fluent Bit, Kibana) để thu thập và phân tích log tập trung.
+
+**Kiến trúc Logging:**
+1.  **Fluent Bit (Collector):** Chạy dưới dạng `DaemonSet` trên từng Node. Nó đọc log từ thư mục `/var/log/containers/*.log`, gán thêm metadata (Tên Pod, Namespace) và đẩy về Elasticsearch.
+2.  **Elasticsearch (Storage):** Cơ sở dữ liệu NoSQL lưu trữ và đánh chỉ mục (index) toàn bộ log.
+3.  **Kibana (Visualization):** Giao diện web giúp truy vấn, tìm kiếm và hiển thị log trực quan.
+
+### a. Triển khai Hạ tầng Logging
+
+Do hạn chế về tài nguyên (RAM), tôi sử dụng **Fluent Bit** thay vì Fluentd (vì Fluent Bit viết bằng C, nhẹ hơn rất nhiều) và tối ưu hóa cấu hình Elasticsearch chạy ở chế độ Single-Node.
+
+**Các lệnh cài đặt (Helm Chart):**
+
+BƯỚC 1: Cài đặt Elasticsearch (Kho chứa Log)
+```bash
+# 1. Thêm Repo Bitnami
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+# 2. Tạo namespace logging
+kubectl create namespace logging
+
+# 3. Cài đặt Elasticsearch (Chế độ tiết kiệm: 1 Node, RAM thấp)
+helm install elasticsearch bitnami/elasticsearch \
+  --namespace logging \
+  --set global.kibanaEnabled=false \
+  --set master.replicas=1 \
+  --set data.replicas=0 \
+  --set coordinating.replicas=0 \
+  --set ingest.replicas=0 \
+  --set master.resources.requests.memory=512Mi \
+  --set master.resources.limits.memory=1Gi
+```
+BƯỚC 2: Cài đặt Kibana (Giao diện xem Log)
+```bash
+# Cài đặt Kibana kết nối tới Elasticsearch vừa tạo
+# Expose qua NodePort 30601 để truy cập từ Windows
+helm install kibana bitnami/kibana \
+  --namespace logging \
+  --set elasticsearch.hosts[0]=elasticsearch \
+  --set elasticsearch.port=9200 \
+  --set service.type=NodePort \
+  --set service.nodePort=30601
 ```
 
-Kết quả: Runner hiển thị trạng thái Idle (Xanh) trên GitHub.
+BƯỚC 3: Cài đặt Fluent Bit (Log Forwarder)
+```bash
+# 1. Thêm repo Fluent
+helm repo add fluent https://fluent.github.io/helm-charts
+helm repo update
 
-*(Hình 4: GitHub Runner trạng thái Active)*
+# 2. Cài đặt Fluent Bit
+helm install fluent-bit fluent/fluent-bit \
+  --namespace logging \
+  --set config.outputs="[OUTPUT]\n    Name es\n    Match *\n    Host elasticsearch.logging.svc.cluster.local\n    Port 9200\n    Index kubernetes_cluster\n    Replace_Dots On"
+```
 
-### 5.2. Pipeline Workflow
+Kết quả:
+```bash
+kubectl get pods -n logging
+```
+![Set up thành công logging](assets/logging_workerops.png)
 
-(Phần này sẽ được trình bày chi tiết trong file YAML ở giai đoạn tiếp theo...)
-
-## KẾT LUẬN
-
-Đã hoàn thành việc xây dựng nền móng hạ tầng vững chắc với:
-
-- **Automation:** Sử dụng Script và Vagrant để dựng môi trường tự động, có thể tái tạo (reproducible).
-- **Optimization:** Tinh chỉnh tài nguyên (CPU/RAM) và Networking (Static IP, Private Network) để phù hợp với môi trường Lab hạn chế.
-- **Ready for Deployment:** Cluster K3s đã sẵn sàng, Runner đã kết nối, chỉ chờ Code được đẩy lên là Pipeline sẽ chạy.
+Truy cập: http://192.168.56.11:30601 để xem log trên giao diện Kibana
